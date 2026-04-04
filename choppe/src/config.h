@@ -62,8 +62,12 @@
         #define LED_STATUS_ON LOW
     #endif
 
-    //
-    #define BLE_NAME "CHOPPE"
+    // Prefixo do nome BLE — os 4 últimos dígitos do MAC WiFi são anexados em tempo de execução
+    // Resultado final: CHOPP_XXXX (ex: CHOPP_B8E0)
+    #define BLE_NAME_PREFIX "CHOPP_"
+
+    // PIN de segurança BLE para pareamento com o tablet
+    #define BLE_PIN 259087
 
     // Flag para identificar se os dados foram gravados na EEPROM
     #define MAGIC_FLAG_EEPROM 0xF2F2  
