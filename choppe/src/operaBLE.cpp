@@ -55,38 +55,29 @@
     // ─────────────────────────────────────────────────────────────────────────
     // Callbacks de segurança BLE — modo Passkey Entry com PIN fixo.
     //
-    // COMO FUNCIONA O PAREAMENTO COM PIN FIXO NO ANDROID:
+    // MODO PASSKEY ENTRY (PIN fixo digitado no tablet):
+    //   • ioCap = ESP_IO_CAP_OUT  → ESP32 declara ter "display"
+    //   • O Android exibe campo para o usuário DIGITAR o PIN
+    //   • onPassKeyRequest() retorna o PIN fixo BLE_PIN (259087)
+    //   • O Android envia o PIN digitado e o ESP32 valida
     //
-    // O protocolo usado é "Passkey Entry" (BLE Legacy Pairing):
-    //   • ioCap = ESP_IO_CAP_OUT  → ESP32 declara que "tem display"
-    //   • O Android interpreta isso como: "o dispositivo exibe um PIN,
-    //     o usuário precisa digitá-lo aqui no tablet"
-    //   • O Android exibe um campo de entrada numérica
-    //   • O usuário digita 259087
-    //   • O Android envia o PIN para o ESP32 via protocolo SMP
-    //   • O ESP32 valida em onPassKeyRequest() retornando o mesmo valor
-    //
-    // POR QUE NÃO USAR SC (LE Secure Connections):
-    //   • SC força o protocolo "Numeric Comparison" onde AMBOS os lados
-    //     geram um código aleatório e o usuário apenas confirma se são iguais
-    //   • Nesse modo NÃO é possível ter PIN fixo — o código é sempre aleatório
-    //   • Para PIN fixo digitado pelo usuário, deve-se usar Legacy Pairing
-    //     (sem SC), com authMode = ESP_LE_AUTH_REQ_MITM_BOND
+    // ATENÇÃO — constante de authMode compatível com ESP32-C3:
+    //   • ESP_LE_AUTH_REQ_MITM_BOND NÃO EXISTE no SDK do ESP32-C3
+    //   • O correto é compor manualmente: ESP_LE_AUTH_BOND | ESP_LE_AUTH_REQ_MITM
+    //   • Isso equivale a Legacy Pairing + MITM + Bonding em todas as versões
     // ─────────────────────────────────────────────────────────────────────────
     class MySecurityCallbacks : public BLESecurityCallbacks {
 
-        // Retorna o PIN fixo que o ESP32 "exibe" (e o Android pede ao usuário)
+        // Retorna o PIN fixo que o ESP32 "exibe" — Android pede ao usuário para digitar
         uint32_t onPassKeyRequest() {
             DBG_PRINTF("\n[BLE] PIN solicitado, retornando: %06lu", (unsigned long)BLE_PIN);
             return BLE_PIN;
         }
 
-        // Notificação do PIN gerado pelo peer (não usado no Passkey Entry)
         void onPassKeyNotify(uint32_t pass_key) {
             DBG_PRINTF("\n[BLE] PIN notificado: %06lu", (unsigned long)pass_key);
         }
 
-        // Confirmação numérica — não é chamada no Passkey Entry (apenas em SC)
         bool onConfirmPIN(uint32_t pass_key) {
             DBG_PRINTF("\n[BLE] Confirma PIN: %06lu == %06lu ? %s",
                 (unsigned long)pass_key,
@@ -144,23 +135,21 @@ void setupBLE() {
 
     // ─── Configuração de segurança: Passkey Entry com PIN fixo ──────────────
     //
-    // Tabela de modos de pareamento BLE:
+    // authReq: ESP_LE_AUTH_BOND | ESP_LE_AUTH_REQ_MITM
+    //   → Composição manual equivalente a "Legacy Pairing + MITM + Bond"
+    //   → Compatível com ESP32, ESP32-C3, ESP32-S3 e todas as versões do SDK
+    //   → NÃO usa SC (Secure Connections), evitando Numeric Comparison
     //
-    // | authMode                       | ioCap            | Comportamento Android        |
-    // |--------------------------------|------------------|------------------------------|
-    // | SC_MITM_BOND                   | IO_CAP_OUT       | Exibe código aleatório (NC)  | ← era o problema
-    // | SC_MITM_BOND                   | IO_CAP_IN        | Exibe código aleatório (NC)  | ← ainda NC
-    // | MITM_BOND (sem SC)             | IO_CAP_OUT       | Pede PIN para digitar ✓      | ← CORRETO
-    // | BOND (sem MITM)                | IO_CAP_NONE      | Just Works, sem PIN          |
-    //
-    // ESP_LE_AUTH_REQ_MITM_BOND = MITM + BOND, sem LE Secure Connections
-    // ESP_IO_CAP_OUT = ESP32 declara ter "display" → Android pede PIN ao usuário
+    // ioCap: ESP_IO_CAP_OUT
+    //   → ESP32 declara ter "display" (exibe o PIN)
+    //   → Android interpreta: "preciso que o usuário DIGITE o PIN"
+    //   → Exibe campo de entrada numérica no tablet
     //
     BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT_MITM);
     BLEDevice::setSecurityCallbacks(new MySecurityCallbacks());
 
-    uint8_t authReq = ESP_LE_AUTH_REQ_MITM_BOND;  // Legacy Pairing + MITM + Bonding
-    uint8_t ioCap   = ESP_IO_CAP_OUT;              // ESP32 tem "display" → Android digita PIN
+    uint8_t authReq = ESP_LE_AUTH_BOND | ESP_LE_AUTH_REQ_MITM;  // compatível com todos os ESP32
+    uint8_t ioCap   = ESP_IO_CAP_OUT;   // Android exibe campo para digitar PIN
     uint8_t keySize = 16;
     uint8_t initKey = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     uint8_t rspKey  = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
