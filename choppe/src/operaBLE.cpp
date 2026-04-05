@@ -112,12 +112,12 @@
 
         BLEDevice::init(bleName.c_str());
 
-        BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT_MITM);
+        BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT);
         BLEDevice::setSecurityCallbacks(new MySecurityCallbacks());
 
         uint32_t passKey = BLE_PIN;
-        uint8_t authReq  = ESP_LE_AUTH_BOND | ESP_LE_AUTH_REQ_MITM;
-        uint8_t ioCap    = ESP_IO_CAP_OUT;
+        uint8_t authReq  = ESP_LE_AUTH_BOND;
+        uint8_t ioCap    = ESP_IO_CAP_NONE;
         uint8_t keySize  = 16;
         uint8_t initKey  = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
         uint8_t rspKey   = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
