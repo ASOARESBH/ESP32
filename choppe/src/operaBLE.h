@@ -6,9 +6,6 @@
     #include <BLEServer.h>
     #include <BLEUtils.h>
     #include <BLE2902.h>
-    #include <BLESecurity.h>
-    #include "esp_gap_ble_api.h"
-
     #include "operacional.h"
 
     #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
