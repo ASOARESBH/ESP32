@@ -21,6 +21,15 @@ volatile uint32_t quantidadePulso = 0;
 volatile int64_t horaPulso = 0;
 
 void executaOperacao(String cmd) {
+    cmd.trim();
+    if (cmd == "PING") {
+        DBG_PRINT(F("\n[OPER] PING recebido -> PONG"));
+        #ifdef USAR_ESP32_UART_BLE
+            enviaBLE("PONG");
+        #endif
+        return;
+    }
+
     String rsp = "ERRO";
     if (cmd[0] != '$') {
         cmd = "!!!";
