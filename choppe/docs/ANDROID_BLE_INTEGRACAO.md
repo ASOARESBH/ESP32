@@ -1,5 +1,7 @@
 # Integracao Android <-> ESP32 Chopp
 
+> **ATENÇÃO - Mudança de segurança (24/04/2026):** O firmware foi atualizado para usar o modo **"Just Works"** (sem PIN). O pareamento agora é automático e não requer entrada de PIN pelo usuário.
+
 Este documento resume exatamente o que o app Android precisa usar para conectar, parear e operar a chopeira via BLE NUS.
 
 ## Identificacao da placa
@@ -18,27 +20,32 @@ Este documento resume exatamente o que o app Android precisa usar para conectar,
 - Service UUID: `6E400001-B5A3-F393-E0A9-E50E24DCCA9E`
 - RX Characteristic UUID: `6E400002-B5A3-F393-E0A9-E50E24DCCA9E`
 - TX Characteristic UUID: `6E400003-B5A3-F393-E0A9-E50E24DCCA9E`
-- PIN de pareamento: `259087`
+- ~~PIN de pareamento: `259087`~~ (removido - modo Just Works)
 - MTU solicitado: `247`
 - `autoConnect`: `false`
 - `transport`: `TRANSPORT_LE`
 
 ## Requisitos do firmware
 
-- A characteristic RX exige acesso criptografado
-- A TX e o descriptor `0x2902` de notificacao exigem acesso criptografado
-- Sem o PIN correto, um app como nRF Connect nao consegue escrever na RX nem habilitar notify
+- ~~A characteristic RX exige acesso criptografado~~
+- ~~A TX e o descriptor `0x2902` de notificacao exigem acesso criptografado~~
+- **NOVO**: A characteristic RX permite acesso sem criptografia
+- A TX e o descriptor `0x2902` de notificacao permitem acesso sem criptografia
+- Sem necessidade de PIN para pareamento
 
 ## Fluxo recomendado no Android
 
 1. Fazer scan BLE e localizar apenas o dispositivo com o nome esperado `CHOPP_XXXX`
 2. Chamar `connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)`
-3. Em `onConnectionStateChange(CONNECTED)`, chamar `device.createBond()` se `bondState != BOND_BONDED`
-4. No `BroadcastReceiver` de pareamento:
-   - interceptar `ACTION_PAIRING_REQUEST`
-   - usar `device.setPin("259087".getBytes())`
-   - chamar `abortBroadcast()` se a estrategia do app ja usar isso
-5. Aguardar `BOND_BONDED`
+3. Em `onConnectionStateChange(CONNECTED)`:
+   - O pareamento agora é automático (modo Just Works)
+   - Não é mais necessário chamar `createBond()` nem configurar PIN
+   - Pode prosseguir diretamente para descoberta de serviços
+4. ~~No `BroadcastReceiver` de pareamento:~~
+   - ~~interceptar `ACTION_PAIRING_REQUEST`~~
+   - ~~usar `device.setPin("259087".getBytes())`~~
+   - ~~chamar `abortBroadcast()` se a estrategia do app ja usar isso~~
+5. ~~Aguardar `BOND_BONDED`~~ (não é mais necessário)
 6. Chamar `requestMtu(247)`
 7. Em `onMtuChanged`, chamar `discoverServices()`
 8. Em `onServicesDiscovered`, localizar o servico NUS e as characteristics RX/TX
@@ -99,7 +106,7 @@ Campos recomendados no JSON:
   "machineId": "maq-001",
   "wifiMac": "DC:B4:D9:99:B8:E2",
   "bleName": "CHOPP_DCB4",
-  "pairingPin": "259087",
+  "pairingPin": null,
   "serviceUuid": "6E400001-B5A3-F393-E0A9-E50E24DCCA9E",
   "rxUuid": "6E400002-B5A3-F393-E0A9-E50E24DCCA9E",
   "txUuid": "6E400003-B5A3-F393-E0A9-E50E24DCCA9E",
@@ -112,9 +119,15 @@ Campos recomendados no JSON:
 
 - O comando de liberacao usa `:` e nao `,`
 - Exemplo correto: `"$ML:300"`
-- O app nao deve enviar `$ML` antes de:
-  - `BOND_BONDED`
-  - `MTU` negociado
-  - servicos descobertos
-  - notificacoes habilitadas
+- ~~O app nao deve enviar `$ML` antes de:~~
+  - ~~`BOND_BONDED`~~
+  - ~~`MTU` negociado~~
+  - ~~servicos descobertos~~
+  - ~~notificacoes habilitadas~~
+- **NOVO**: O app pode enviar comandos após:
+  - Conexão estabelecida
+  - MTU negociado
+  - Serviços descobertos
+  - Notificações habilitadas
 - O app deve tratar desconexao limpando o estado `READY` e reiniciando o fluxo completo
+- O pareamento agora é automático (modo Just Works) - não requer entrada de PIN

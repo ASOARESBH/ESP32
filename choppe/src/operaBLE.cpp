@@ -111,17 +111,17 @@
         DBG_PRINT(bleName);
 
         BLEDevice::init(bleName.c_str());
-        BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT);
+        // Modo de segurança "Just Works" - sem PIN, sem MITM
+        BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT_NO_MITM);
         BLEDevice::setSecurityCallbacks(new MySecurityCallbacks());
 
-        uint32_t passKey = BLE_PIN;
-        uint8_t authReq  = ESP_LE_AUTH_BOND;
+        uint8_t authReq  = ESP_LE_AUTH_NO_BOND;  // Sem necessidade de bond/pareamento
         uint8_t ioCap    = ESP_IO_CAP_NONE;
         uint8_t keySize  = 16;
         uint8_t initKey  = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
         uint8_t rspKey   = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
 
-        esp_ble_gap_set_security_param(ESP_BLE_SM_SET_STATIC_PASSKEY, &passKey, sizeof(passKey));
+        // Removido: ESP_BLE_SM_SET_STATIC_PASSKEY - sem PIN fixo
         esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &authReq, sizeof(authReq));
         esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &ioCap, sizeof(ioCap));
         esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &keySize, sizeof(keySize));
@@ -137,23 +137,23 @@
             CHARACTERISTIC_UUID_TX,
             BLECharacteristic::PROPERTY_NOTIFY
         );
-        pTxCharacteristic->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
+        pTxCharacteristic->setAccessPermissions(ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE);
         BLE2902 *pTxDescriptor = new BLE2902();
-        pTxDescriptor->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
+        pTxDescriptor->setAccessPermissions(ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE);
         pTxCharacteristic->addDescriptor(pTxDescriptor);
 
         BLECharacteristic *pRxCharacteristic = pService->createCharacteristic(
             CHARACTERISTIC_UUID_RX,
             BLECharacteristic::PROPERTY_WRITE
         );
-        pRxCharacteristic->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
+        pRxCharacteristic->setAccessPermissions(ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE);
         pRxCharacteristic->setCallbacks(new MyCallbacks());
 
         pService->start();
         iniciaAdvertising();
         xTaskCreate(taskBLE, "taskBLE", 4096, NULL, 1, NULL);
 
-        DBG_PRINT(F("\n[BLE] Setup concluido - aguardando conexao com PIN 259087"));
+        DBG_PRINT(F("\n[BLE] Setup concluido - modo Just Works (sem PIN)"));
     }
 
     void enviaBLE(String msg) {

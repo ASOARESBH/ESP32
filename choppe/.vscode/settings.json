@@ -2,5 +2,6 @@
     "files.associations": {
         "string_view": "cpp",
         "regex": "cpp"
-    }
+    },
+    "terminal.integrated.cwd": "${workspaceFolder}"
 }
