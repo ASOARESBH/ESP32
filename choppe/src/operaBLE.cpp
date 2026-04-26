@@ -84,7 +84,9 @@
 
         snprintf(macHex, sizeof(macHex), "%012llX", efuseMac);
 
-        String bleName = String(BLE_NAME_PREFIX) + String(macHex).substring(0, 4);
+        // Usa os últimos 4 hex do eFuse (bytes reais do MAC, não invertidos)
+        // Ex: MAC 48:F6:EE:23:2A:6C → nome CHOPP_48F6
+        String bleName = String(BLE_NAME_PREFIX) + String(macHex).substring(8, 12);
         bleName.toUpperCase();
         return bleName;
     }
