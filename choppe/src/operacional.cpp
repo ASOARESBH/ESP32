@@ -141,29 +141,39 @@ void taskLiberaML(void *pvParameters) {
                 digitalWrite(PINO_RELE,RELE_ON);                
                 tempoInicio = esp_timer_get_time();
                 horaPulso = tempoInicio;
-                int64_t timeOutSensor = tempoInicio + ((int64_t)configuracao.timeOut * 1000000LL);
-                
-                // Aguarda contagem dos pulsos
-                while (((contadorPulso < quantidadePulso)||(quantidadePulso==0))&&(esp_timer_get_time() < timeOutSensor )){
+                // Timeout adaptativo: reinicia a cada pulso recebido
+                // Fecha somente se ficar SEM PULSOS por configuracao.timeOut segundos consecutivos
+                int64_t ultimoPulsoCheck = esp_timer_get_time();
+                uint32_t ultimoContador = contadorPulso;
+
+                while ((contadorPulso < quantidadePulso) || (quantidadePulso == 0)) {
                     vTaskDelay(50);
-                    if (millis() > proximoStatus ) {
-                        // Envia status dos pulsos para o App
+
+                    if (contadorPulso != ultimoContador) {
+                        ultimoContador = contadorPulso;
+                        ultimoPulsoCheck = esp_timer_get_time();
+                    }
+
+                    int64_t inatividade = esp_timer_get_time() - ultimoPulsoCheck;
+                    if (inatividade > ((int64_t)configuracao.timeOut * 1000000LL)) {
+                        DBG_PRINT(F("\n[OPER] Timeout de inatividade — sem fluxo por "));
+                        DBG_PRINT(configuracao.timeOut);
+                        DBG_PRINT(F("s. Fechando valvula."));
+                        break;
+                    }
+
+                    if (millis() > proximoStatus) {
                         proximoStatus = millis() + 2000UL;
                         tempoDecorridoS = (float)(esp_timer_get_time() - tempoInicio) / 1000000.0;
-                        if (contadorPulso){
+                        if (contadorPulso) {
                             mlLiberado = (float)contadorPulso / pulsoML;
-                            //vazao = (mlLiberado / tempoDecorridoS) * 60.0; // Calcula ML/seg e converte para ML/min
-                            //vazao /= 1000.0; // Converte para L/min
                         }
                         #ifdef USAR_ESP32_UART_BLE
-                            //statusRetorno = COMANDO_VZ + String(vazao,3);
-                            statusRetorno = COMANDO_VP + String(mlLiberado,3);
+                            statusRetorno = COMANDO_VP + String(mlLiberado, 3);
                             enviaBLE(statusRetorno);
-                            //DBG_PRINT(F("\n[OPER] Vazao (L/min): "));
-                            //DBG_PRINT(vazao);
                         #endif
                     }
-                }                
+                }
 
                 digitalWrite(PINO_RELE,!RELE_ON);
                 detachInterrupt(digitalPinToInterrupt(PINO_SENSOR_FLUSO));
