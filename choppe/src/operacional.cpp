@@ -78,7 +78,6 @@ void executaOperacao(String cmd) {
             DBG_PRINT( F( "\n[OPER] Configuração timeOut do sensor: "));
             DBG_PRINT(param);            
             configuracao.timeOut = quantidade;
-            gravaConfiguracao();
             rsp = "OK";
         } else {
             rsp = COMANDO_PL + String(configuracao.pulsosLitro);
@@ -142,7 +141,7 @@ void taskLiberaML(void *pvParameters) {
                 digitalWrite(PINO_RELE,RELE_ON);                
                 tempoInicio = esp_timer_get_time();
                 horaPulso = tempoInicio;
-                int64_t timeOutSensor = tempoInicio + ((int64_t)configuracao.timeOut * 1000LL);
+                int64_t timeOutSensor = tempoInicio + ((int64_t)configuracao.timeOut * 1000000LL);
                 
                 // Aguarda contagem dos pulsos
                 while (((contadorPulso < quantidadePulso)||(quantidadePulso==0))&&(esp_timer_get_time() < timeOutSensor )){
@@ -150,7 +149,7 @@ void taskLiberaML(void *pvParameters) {
                     if (millis() > proximoStatus ) {
                         // Envia status dos pulsos para o App
                         proximoStatus = millis() + 2000UL;
-                        tempoDecorridoS = (float)(horaPulso - tempoInicio) / 1000000.0;
+                        tempoDecorridoS = (float)(esp_timer_get_time() - tempoInicio) / 1000000.0;
                         if (contadorPulso){
                             mlLiberado = (float)contadorPulso / pulsoML;
                             //vazao = (mlLiberado / tempoDecorridoS) * 60.0; // Calcula ML/seg e converte para ML/min

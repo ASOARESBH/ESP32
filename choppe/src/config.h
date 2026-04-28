@@ -9,7 +9,7 @@
     #define PULSO_LITRO 5880 //1L = 5880 square waves
     #define RELE_ON     LOW
     #define SENSOR_ON   LOW
-    #define TIMER_OUT_SENSOR 5000LL
+    #define TIMER_OUT_SENSOR 10
 
     #define COMANDO_ML "ML:" // Libera quantidade de ML
     #define COMANDO_PL "PL:" // Configura pulso por litro no sensor de fluxo
