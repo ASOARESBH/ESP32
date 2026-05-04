@@ -20,7 +20,7 @@ void setup() {
     pinMode( PINO_STATUS, OUTPUT );
     digitalWrite( PINO_STATUS, !LED_STATUS_ON);
 
-    pinMode( PINO_SENSOR_FLUSO, INPUT);
+    pinMode( PINO_SENSOR_FLUSO, INPUT_PULLUP);
     
     // Inicia porta para debug
     #ifdef debug_debug

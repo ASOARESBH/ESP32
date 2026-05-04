@@ -19,6 +19,9 @@ extern TaskHandle_t taskRFIDHandle;
 volatile uint32_t contadorPulso = 0;
 volatile uint32_t quantidadePulso = 0;
 volatile int64_t horaPulso = 0;
+volatile int64_t ultimoPulsoAceito = 0;
+
+static const int64_t MIN_INTERVALO_PULSO_US = 800; // YF-S401 max ~588Hz => ~1700us/pulso.
 
 void executaOperacao(String cmd) {
     cmd.trim();
@@ -91,8 +94,13 @@ void executaOperacao(String cmd) {
 }
 
 void IRAM_ATTR fluxoISR() {
+    int64_t agora = esp_timer_get_time();
+    if ((agora - ultimoPulsoAceito) < MIN_INTERVALO_PULSO_US) {
+        return;
+    }
+    ultimoPulsoAceito = agora;
     contadorPulso++;
-    horaPulso = esp_timer_get_time();
+    horaPulso = agora;
     if ((quantidadePulso)&&(!( contadorPulso < quantidadePulso ))) {
         digitalWrite(PINO_RELE,!RELE_ON);
         detachInterrupt(digitalPinToInterrupt(PINO_SENSOR_FLUSO));
@@ -135,14 +143,15 @@ void taskLiberaML(void *pvParameters) {
                 }                
                 
                 contadorPulso = 0;
+                ultimoPulsoAceito = 0;
                 attachInterrupt(digitalPinToInterrupt(PINO_SENSOR_FLUSO), fluxoISR, RISING);
                 
                 // Aciona valvula
                 digitalWrite(PINO_RELE,RELE_ON);                
                 tempoInicio = esp_timer_get_time();
                 horaPulso = tempoInicio;
-                // Timeout adaptativo: reinicia a cada pulso recebido
-                // Fecha somente se ficar SEM PULSOS por configuracao.timeOut segundos consecutivos
+                // Timeout adaptativo: reinicia a cada pulso recebido.
+                // Fecha somente se ficar SEM PULSOS por configuracao.timeOut ms consecutivos.
                 int64_t ultimoPulsoCheck = esp_timer_get_time();
                 uint32_t ultimoContador = contadorPulso;
 
@@ -155,10 +164,10 @@ void taskLiberaML(void *pvParameters) {
                     }
 
                     int64_t inatividade = esp_timer_get_time() - ultimoPulsoCheck;
-                    if (inatividade > ((int64_t)configuracao.timeOut * 1000000LL)) {
+                    if (inatividade > ((int64_t)configuracao.timeOut * 1000LL)) {
                         DBG_PRINT(F("\n[OPER] Timeout de inatividade — sem fluxo por "));
                         DBG_PRINT(configuracao.timeOut);
-                        DBG_PRINT(F("s. Fechando valvula."));
+                        DBG_PRINT(F("ms. Fechando valvula."));
                         break;
                     }
 
@@ -229,6 +238,11 @@ void leConfiguracao() {
         configuracao.pulsosLitro = (uint32_t)PULSO_LITRO;
         configuracao.timeOut = (uint32_t)TIMER_OUT_SENSOR;
         
+    }
+    if (configuracao.timeOut > 0 && configuracao.timeOut < 1000) {
+        DBG_PRINT(F(", migrando timeout de segundos para ms"));
+        configuracao.timeOut *= 1000;
+        gravaConfiguracao();
     }
     DBG_PRINTLN();
 }
