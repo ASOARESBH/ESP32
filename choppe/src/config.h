@@ -24,7 +24,7 @@
     // Habilita modulos para compilação
     #define USAR_ESP32_UART_BLE
     //#define USAR_PAGINA_CONFIG
-    #define USAR_RFID
+    //#define USAR_RFID
     
     // pinout
     #ifdef ARDUINO_ESP32S3_DEV 
@@ -38,7 +38,7 @@
         #define PINO_RC522_MISO 37
         #define PINO_RC522_SCLK 35
     #elif defined(ARDUINO_ESP32_DEV)
-        #define PINO_SENSOR_FLUSO   17
+        
         #define PINO_RELE           16
         #define PINO_STATUS         2
 

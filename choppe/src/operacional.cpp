@@ -223,26 +223,46 @@ void leConfiguracao() {
     EEPROM.get( 0, configuracao );  
   
     // Inicializa com configurações padrão,quando as configurações não foram gravadas pela primeira vez ou em caso de reset //
-    if ( configuracao.magicFlag != MAGIC_FLAG_EEPROM ) {    
+    if ( configuracao.magicFlag != MAGIC_FLAG_EEPROM ) {
         DBG_PRINT(F(", carregando configuração de fábrica"));
         memset(&configuracao,0,sizeof(config_t));
         configuracao.magicFlag = MAGIC_FLAG_EEPROM;
-        configuracao.modoAP = 0; // 1 = modoap
-        
-        // WiFi 
+        configuracao.modoAP = 0;
+
         stemp = WIFI_DEFAULT_SSID;
         stemp.toCharArray(configuracao.wifiSSID, stemp.length()+1);
         stemp = WIFI_DEFAULT_PSW;
         stemp.toCharArray(configuracao.wifiPass, stemp.length()+1);
 
         configuracao.pulsosLitro = (uint32_t)PULSO_LITRO;
-        configuracao.timeOut = (uint32_t)TIMER_OUT_SENSOR;
-        
-    }
-    if (configuracao.timeOut > 0 && configuracao.timeOut < 1000) {
-        DBG_PRINT(F(", migrando timeout de segundos para ms"));
-        configuracao.timeOut *= 1000;
+        configuracao.timeOut     = (uint32_t)TIMER_OUT_SENSOR;
         gravaConfiguracao();
+
+    } else {
+        bool precisaGravar = false;
+
+        // timeOut deve estar em ms no range 1000–300000.
+        // Valores fora disso indicam legado (segundos) ou lixo de EEPROM.
+        if (configuracao.timeOut > 0 && configuracao.timeOut < 1000) {
+            // Legado em segundos → converte para ms
+            DBG_PRINT(F(", migrando timeOut para ms"));
+            configuracao.timeOut *= 1000;
+            precisaGravar = true;
+        } else if (configuracao.timeOut == 0 || configuracao.timeOut > 300000) {
+            // Inválido (0 ou lixo) → reseta para padrão
+            DBG_PRINT(F(", corrigindo timeOut invalido"));
+            configuracao.timeOut = (uint32_t)TIMER_OUT_SENSOR;
+            precisaGravar = true;
+        }
+
+        // pulsosLitro = 0 causaria divisão indireta por zero no cálculo de ML.
+        if (configuracao.pulsosLitro == 0 || configuracao.pulsosLitro > 100000) {
+            DBG_PRINT(F(", corrigindo pulsosLitro invalido"));
+            configuracao.pulsosLitro = (uint32_t)PULSO_LITRO;
+            precisaGravar = true;
+        }
+
+        if (precisaGravar) gravaConfiguracao();
     }
     DBG_PRINTLN();
 }

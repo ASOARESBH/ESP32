@@ -125,7 +125,7 @@ Campos recomendados no JSON:
   - ~~servicos descobertos~~
   - ~~notificacoes habilitadas~~
 - **NOVO**: O app pode enviar comandos após:
-  - Conexão estabelecida
+  - Conexão estabelecida 
   - MTU negociado
   - Serviços descobertos
   - Notificações habilitadas
