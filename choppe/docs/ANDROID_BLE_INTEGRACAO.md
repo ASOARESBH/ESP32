@@ -84,7 +84,7 @@
 - Se desconectar no meio de `$ML:` ou `$LB:`, a valvula fecha em ate 50 ms
 - `QP:`, `ML:` e `FN:` **nao serao enviados** apos abort por desconexao
 - Ao reconectar, assumir que a liberacao anterior foi interrompida
-- Nao aguardar `FN:` apos reconexao — iniciar novo ciclo se necessario
+- Nao aguardar `FN:` apos reconexao — ver **secao 9** para retomar o volume restante via `$RS:`
 
 ---
 
@@ -100,7 +100,7 @@ Todos os comandos sao escritos na characteristic **RX** (`6E400002-...`).
 | `$PL:<pulsos>` | inteiro > 0 | Configura pulsos/litro — persiste na EEPROM |
 | `$PL:0` | 0 | GET: retorna valor atual como `PL:<valor>` |
 | `$TO:<s>` | inteiro > 0 | Configura timeout de inatividade em **segundos** — persiste na EEPROM |
-| `$TO:0` | 0 | GET: retorna valor atual como `TO:<valor_ms>` |
+| `$TO:0` | 0 | GET: retorna valor atual como `TO:<valor_ms>` (ms, nao segundos) |
 | `$RS:` | — | Retoma ciclo anterior incompleto — retorna `RS:<restante_ml>` ou `RS:0` se ja completo |
 | `$DB:` | — | Diagnostico: retorna `PIN=`, `VAL=`, `TO=`, `PL=`, `QP=` |
 
@@ -120,7 +120,7 @@ Todas as respostas chegam como notificacoes na characteristic **TX** (`6E400003-
 | `IN:` | Inicio da liberacao | Valvula abriu, ciclo iniciado |
 | `VP:<ml>` | A cada ~2s durante liberacao | Volume parcial em mL com 3 casas decimais |
 | `QP:<pulsos>` | Fim do ciclo | Total de pulsos contados |
-| `ML:<ml>` | Fim do ciclo | Volume final liberado em mL |
+| `ML:<ml>` | Fim do ciclo | Volume final liberado em mL — **inteiro** se ciclo completo (`ML:300`), **float 2 casas** se interrompido (`ML:150.34`) |
 | `FN:` | Fim do ciclo | Ciclo encerrado, valvula fechada |
 | `PL:<valor>` | Resposta a `$PL:0` | Pulsos por litro configurado |
 | `TO:<valor_ms>` | Resposta a `$TO:0` | Timeout de inatividade em ms |
@@ -257,7 +257,7 @@ ao reconectar apos desconexao inesperada durante ciclo {
 
 ---
 
-## 10. Keepalive PING/PONG  
+## 10. Keepalive PING/PONG
 
 **Status: opcional.**
 

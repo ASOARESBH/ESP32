@@ -72,11 +72,12 @@ void executaOperacao(String cmd) {
         uint32_t quantidade = (uint32_t)param.toInt();
         if (quantidade>0){
             DBG_PRINT( F( "\n[OPER] Configuração timeOut do sensor: "));
-            DBG_PRINT(param);            
+            DBG_PRINT(param);
             configuracao.timeOut = quantidade * 1000UL; // converte segundos → ms
+            gravaConfiguracao();
             rsp = "OK";
         } else {
-            rsp = COMANDO_PL + String(configuracao.pulsosLitro);
+            rsp = COMANDO_TO + String(configuracao.timeOut);
         }
     } else if (op == COMANDO_RS) {
         if (ultimaMetaML > 0) {
