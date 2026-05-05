@@ -14,7 +14,8 @@
     #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
     #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
-    extern bool deviceConnected;
+    extern bool              deviceConnected;
+    extern volatile bool     abortarLiberacao;
 
     void setupBLE();
     void enviaBLE(String msg);

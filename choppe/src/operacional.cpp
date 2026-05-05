@@ -23,6 +23,9 @@ volatile int64_t ultimoPulsoAceito = 0;
 
 static const int64_t MIN_INTERVALO_PULSO_US = 800; // YF-S401 max ~588Hz => ~1700us/pulso.
 
+static uint32_t ultimaMetaML       = 0;    // meta do ultimo ciclo ($RS:)
+static float    ultimoDispensadoML = 0.0f; // real dispensado no ultimo ciclo ($RS:)
+
 void executaOperacao(String cmd) {
     cmd.trim();
     if (cmd == "PING") {
@@ -65,26 +68,38 @@ void executaOperacao(String cmd) {
         } else { 
             DBG_PRINT( F( "\n[OPER] Erro xQueueSend"));
         }
-    } else if ( op == COMANDO_RI) {        
-        DBG_PRINT( F( "\n[OPER] Configuração RFID administrador: "));
-        DBG_PRINT(param);
-        if (param.length() == 8 ){            
-            param.toCharArray(configuracao.rfidMaster, param.length()+1);
-            gravaConfiguracao();
-            rsp = "OK";
-        } else {
-            DBG_PRINT(F(", ERRO"));
-        }
     } else if (op == COMANDO_TO) {
         uint32_t quantidade = (uint32_t)param.toInt();
         if (quantidade>0){
             DBG_PRINT( F( "\n[OPER] Configuração timeOut do sensor: "));
             DBG_PRINT(param);            
-            configuracao.timeOut = quantidade;
+            configuracao.timeOut = quantidade * 1000UL; // converte segundos → ms
             rsp = "OK";
         } else {
             rsp = COMANDO_PL + String(configuracao.pulsosLitro);
         }
+    } else if (op == COMANDO_RS) {
+        if (ultimaMetaML > 0) {
+            float restante = (float)ultimaMetaML - ultimoDispensadoML;
+            uint32_t restanteML = (restante > 1.0f) ? (uint32_t)restante : 0;
+            if (restanteML > 0) {
+                if (xQueueSend(listaLiberarML, &restanteML, 0) == pdTRUE) {
+                    DBG_PRINT(F("\n[OPER] Resume: enfileirando "));
+                    DBG_PRINT(restanteML);
+                    DBG_PRINT(F("mL restantes"));
+                    rsp = COMANDO_RS + String(restanteML);
+                }
+            } else {
+                rsp = COMANDO_RS + String(0); // ciclo anterior ja concluido
+            }
+        }
+    } else if (op == "DB:") {
+        // Diagnóstico: retorna config e estado atual do pino do sensor
+        rsp  = "PIN="  + String(PINO_SENSOR_FLUSO);
+        rsp += " VAL=" + String(digitalRead(PINO_SENSOR_FLUSO));
+        rsp += " TO="  + String(configuracao.timeOut);
+        rsp += " PL="  + String(configuracao.pulsosLitro);
+        rsp += " QP="  + String(contadorPulso);
     } else {
         DBG_PRINT( F( "\n[OPER] Erro. Comando desconhecido"));
     }
@@ -134,8 +149,10 @@ void taskLiberaML(void *pvParameters) {
                 if (ml == 0xFFFFFFFF) {
                     ml = 0;
                     quantidadePulso = 0;
-                } else {                    
+                    ultimaMetaML = 0; // modo LB nao tem meta para retomar
+                } else {
                     quantidadePulso = (uint32_t)(pulsoML * (float)ml);
+                    ultimaMetaML = ml;
                     DBG_PRINT(F("\n[OPER] Liberando (ML): "));
                     DBG_PRINT(ml);
                     DBG_PRINT(F("\n[OPER] liberando (Pulsos): "));
@@ -147,7 +164,10 @@ void taskLiberaML(void *pvParameters) {
                 attachInterrupt(digitalPinToInterrupt(PINO_SENSOR_FLUSO), fluxoISR, RISING);
                 
                 // Aciona valvula
-                digitalWrite(PINO_RELE,RELE_ON);                
+                digitalWrite(PINO_RELE,RELE_ON);
+                #ifdef USAR_ESP32_UART_BLE
+                    enviaBLE(COMANDO_IN);
+                #endif
                 tempoInicio = esp_timer_get_time();
                 horaPulso = tempoInicio;
                 // Timeout adaptativo: reinicia a cada pulso recebido.
@@ -157,6 +177,13 @@ void taskLiberaML(void *pvParameters) {
 
                 while ((contadorPulso < quantidadePulso) || (quantidadePulso == 0)) {
                     vTaskDelay(50);
+
+                    #ifdef USAR_ESP32_UART_BLE
+                    if (abortarLiberacao) {
+                        DBG_PRINT(F("\n[OPER] Abort: BLE desconectado. Fechando valvula."));
+                        break;
+                    }
+                    #endif
 
                     if (contadorPulso != ultimoContador) {
                         ultimoContador = contadorPulso;
@@ -186,7 +213,10 @@ void taskLiberaML(void *pvParameters) {
 
                 digitalWrite(PINO_RELE,!RELE_ON);
                 detachInterrupt(digitalPinToInterrupt(PINO_SENSOR_FLUSO));
-                
+
+                if (pulsoML > 0) mlLiberado = (float)contadorPulso / pulsoML;
+                ultimoDispensadoML = mlLiberado;
+
                 // Envia status
                 #ifdef USAR_ESP32_UART_BLE
                     statusRetorno = COMANDO_QP + String(contadorPulso);
@@ -200,8 +230,9 @@ void taskLiberaML(void *pvParameters) {
                         statusRetorno += String(mlLiberado);
                     }
                     enviaBLE(statusRetorno);
+                    enviaBLE(COMANDO_FN);
                 #endif
-                
+
                 DBG_PRINT(F("\n[OPER] Liberado (L): "));
                 DBG_PRINT(mlLiberado/1000,3);
                 DBG_PRINT(F("\n[OPER] Tempo (S): "));
