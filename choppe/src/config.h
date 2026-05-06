@@ -22,9 +22,16 @@
     #define COMANDO_VP "VP:" // Volume parcial
     #define COMANDO_TO "TO:" // Configura timeout, tempo aguardando inicio do fluxo
     #define COMANDO_RS "RS:" // Retoma ciclo anterior incompleto (resume)
+    #define COMANDO_CA "CA:" // Inicia ciclo de calibracao do sensor
+    #define COMANDO_CF "CF:" // Informa volume real medido (calibration feedback)
+    #define COMANDO_VR "VR:" // Consulta versao do firmware
+
+    #define FIRMWARE_VERSAO "1.0.0"
+    #define FIRMWARE_DATA   "2026-05-05"
 
     // Habilita modulos para compilação
     #define USAR_ESP32_UART_BLE
+    #define USAR_BUZZER
     //#define USAR_PAGINA_CONFIG
     //#define USAR_RFID
 
@@ -33,6 +40,7 @@
         #define PINO_RELE           48
         #define PINO_STATUS         21
         #define PINO_SENSOR_FLUSO   2
+        #define PINO_BUZZER         15
 
         //#define PINO_RC522_SSEL 14
         //#define PINO_RC522_RSET 13
@@ -43,6 +51,7 @@
         #define PINO_SENSOR_FLUSO   17
         #define PINO_RELE           16
         #define PINO_STATUS         2
+        #define PINO_BUZZER         18
 
         //#define PINO_RC522_SSEL 5
         //#define PINO_RC522_RSET 4
@@ -62,6 +71,7 @@
         #define PINO_SENSOR_FLUSO   0
         #define PINO_RELE           1
         #define PINO_STATUS         8
+        #define PINO_BUZZER         10
         #define LED_STATUS_ON LOW
     #endif
 

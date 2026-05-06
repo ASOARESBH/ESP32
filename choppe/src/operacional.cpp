@@ -1,4 +1,5 @@
 #include "operacional.h"
+#include "operaBuzzer.h"
 /* 
     *** Apenas para observar ***
     Sensor de fluxo YF-S401
@@ -25,6 +26,10 @@ static const int64_t MIN_INTERVALO_PULSO_US = 800; // YF-S401 max ~588Hz => ~170
 
 static uint32_t ultimaMetaML       = 0;    // meta do ultimo ciclo ($RS:)
 static float    ultimoDispensadoML = 0.0f; // real dispensado no ultimo ciclo ($RS:)
+
+static bool     modoCalibracao       = false; // ciclo atual e de calibracao ($CA:)
+static bool     aguardandoCalibracao = false; // aguardando $CF: apos ciclo CA
+static uint32_t qpCalibracao         = 0;     // pulsos contados no ciclo CA
 
 void executaOperacao(String cmd) {
     cmd.trim();
@@ -94,6 +99,39 @@ void executaOperacao(String cmd) {
                 rsp = COMANDO_RS + String(0); // ciclo anterior ja concluido
             }
         }
+    } else if (op == COMANDO_CA) {
+        uint32_t quantidade = (uint32_t)param.toInt();
+        if (quantidade > 0) {
+            if (xQueueSend(listaLiberarML, &quantidade, 0) == pdTRUE) {
+                modoCalibracao       = true;
+                aguardandoCalibracao = false; // cancela pendencia anterior
+                qpCalibracao         = 0;
+                rsp = "OK";
+            }
+        }
+    } else if (op == COMANDO_CF) {
+        if (aguardandoCalibracao && qpCalibracao > 0) {
+            uint32_t mlReal = (uint32_t)param.toInt();
+            if (mlReal > 0) {
+                configuracao.pulsosLitro = (uint32_t)((float)qpCalibracao / (float)mlReal * 1000.0f);
+                gravaConfiguracao();
+                aguardandoCalibracao = false;
+                qpCalibracao         = 0;
+                DBG_PRINT(F("\n[OPER] Calibracao concluida. pulsosLitro: "));
+                DBG_PRINT(configuracao.pulsosLitro);
+                #ifdef USAR_ESP32_UART_BLE
+                    enviaBLE(COMANDO_PL + String(configuracao.pulsosLitro));
+                    enviaBLE(COMANDO_FN);
+                #endif
+                #ifdef USAR_BUZZER
+                    buzzerFN();
+                #endif
+                return;
+            }
+        }
+        // rsp permanece "ERRO" se nao ha calibracao pendente ou mlReal invalido
+    } else if (op == COMANDO_VR) {
+        rsp = COMANDO_VR + String(FIRMWARE_VERSAO) + "/" + String(FIRMWARE_DATA);
     } else if (op == "DB:") {
         // Diagnóstico: retorna config e estado atual do pino do sensor
         rsp  = "PIN="  + String(PINO_SENSOR_FLUSO);
@@ -169,6 +207,9 @@ void taskLiberaML(void *pvParameters) {
                 #ifdef USAR_ESP32_UART_BLE
                     enviaBLE(COMANDO_IN);
                 #endif
+                #ifdef USAR_BUZZER
+                    buzzerIN();
+                #endif
                 tempoInicio = esp_timer_get_time();
                 horaPulso = tempoInicio;
                 // Timeout adaptativo: reinicia a cada pulso recebido.
@@ -218,21 +259,36 @@ void taskLiberaML(void *pvParameters) {
                 if (pulsoML > 0) mlLiberado = (float)contadorPulso / pulsoML;
                 ultimoDispensadoML = mlLiberado;
 
-                // Envia status
-                #ifdef USAR_ESP32_UART_BLE
-                    statusRetorno = COMANDO_QP + String(contadorPulso);
-                    enviaBLE(statusRetorno);
-                
-                    // Envia status de ML liberado                
-                    statusRetorno = COMANDO_ML;
-                    if (contadorPulso == quantidadePulso){
-                        statusRetorno += String(ml);
-                    } else {
-                        statusRetorno += String(mlLiberado);
+                // Envia status — bifurca entre ciclo normal e ciclo de calibracao
+                if (modoCalibracao) {
+                    modoCalibracao = false;
+                    #ifdef USAR_ESP32_UART_BLE
+                    if (!abortarLiberacao) {
+                        qpCalibracao         = contadorPulso;
+                        aguardandoCalibracao = true;
+                        DBG_PRINT(F("\n[OPER] Calibracao: aguardando $CF: QP="));
+                        DBG_PRINT(qpCalibracao);
+                        enviaBLE(COMANDO_QP + String(contadorPulso));
+                        enviaBLE(COMANDO_CA); // sinaliza: medir proveta e enviar $CF:<ml_real>
                     }
-                    enviaBLE(statusRetorno);
-                    enviaBLE(COMANDO_FN);
-                #endif
+                    #endif
+                } else {
+                    #ifdef USAR_ESP32_UART_BLE
+                        statusRetorno = COMANDO_QP + String(contadorPulso);
+                        enviaBLE(statusRetorno);
+                        statusRetorno = COMANDO_ML;
+                        if (contadorPulso == quantidadePulso) {
+                            statusRetorno += String(ml);
+                        } else {
+                            statusRetorno += String(mlLiberado);
+                        }
+                        enviaBLE(statusRetorno);
+                        enviaBLE(COMANDO_FN);
+                    #endif
+                    #ifdef USAR_BUZZER
+                        buzzerFN();
+                    #endif
+                }
 
                 DBG_PRINT(F("\n[OPER] Liberado (L): "));
                 DBG_PRINT(mlLiberado/1000,3);

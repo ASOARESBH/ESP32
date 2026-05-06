@@ -1,7 +1,7 @@
 # Integracao Android <-> ESP32 Chopp
 
-> **Firmware: 2026-05-05**
-> Nome BLE dinamico `CHOPP_XXXX` | Just Works sem PIN | Abort automatico de valvula ao desconectar | Resume de ciclo incompleto via `$RS:`
+> **Firmware: 1.0.0 — 2026-05-05**
+> Nome BLE dinamico `CHOPP_XXXX` | Just Works sem PIN | Abort automatico de valvula ao desconectar | Resume via `$RS:` | Calibracao via `$CA:`/`$CF:` | Buzzer em IN/FN | Versao via `$VR:`
 
 ---
 
@@ -102,6 +102,9 @@ Todos os comandos sao escritos na characteristic **RX** (`6E400002-...`).
 | `$TO:<s>` | inteiro > 0 | Configura timeout de inatividade em **segundos** — persiste na EEPROM |
 | `$TO:0` | 0 | GET: retorna valor atual como `TO:<valor_ms>` (ms, nao segundos) |
 | `$RS:` | — | Retoma ciclo anterior incompleto — retorna `RS:<restante_ml>` ou `RS:0` se ja completo |
+| `$CA:<ml>` | inteiro > 0 | Inicia ciclo de calibracao — identico ao `$ML:` mas ao final aguarda `$CF:` |
+| `$CF:<ml>` | inteiro > 0 | Informa volume real medido na proveta — calcula e salva novo `pulsosLitro` |
+| `$VR:` | — | Consulta versao do firmware — retorna `VR:<versao>/<data>` |
 | `$DB:` | — | Diagnostico: retorna `PIN=`, `VAL=`, `TO=`, `PL=`, `QP=` |
 
 > `$TO:` recebe **segundos** como entrada, mas `$TO:0` retorna em **ms** internamente.
@@ -126,6 +129,8 @@ Todas as respostas chegam como notificacoes na characteristic **TX** (`6E400003-
 | `TO:<valor_ms>` | Resposta a `$TO:0` | Timeout de inatividade em ms |
 | `RS:<restante_ml>` | Resposta a `$RS:` com pendencia | Confirmacao de resume: mL que serao dispensados |
 | `RS:0` | Resposta a `$RS:` sem pendencia | Ciclo anterior ja estava completo, nada a retomar |
+| `CA:` | Fim do ciclo de calibracao | Dispensacao concluida — aguardando `$CF:<ml_real>` |
+| `VR:<versao>/<data>` | Resposta a `$VR:` | Versao e data de compilacao do firmware — ex.: `VR:1.0.0/2026-05-05` |
 
 > **`BUSY` nao implementado:** operacao em andamento retorna `ERRO`. Android deve aguardar `FN:` antes de enviar novo `$ML:` ou `$RS:`.
 
@@ -257,7 +262,79 @@ ao reconectar apos desconexao inesperada durante ciclo {
 
 ---
 
-## 10. Keepalive PING/PONG
+## 10. Calibracao do sensor de fluxo
+
+### Por que calibrar
+
+O sensor YF-S401 e calibrado para agua (5880 pulsos/L). Chopp tem densidade e viscosidade diferentes, e a pressao do CO2 varia entre barris. O resultado e que `pulsosLitro` correto para cada instalacao pode diferir do valor de fabrica.
+
+A calibracao consiste em dispensar um volume conhecido, medir fisicamente na proveta e informar ao ESP32 o valor real — ele recalcula e salva o fator correto na EEPROM.
+
+### Prerequisito
+
+Calibrar com a linha **cheia de chopp, sem ar**. Se houver ar no sistema, os primeiros pulsos representam ar e o fator calculado sera incorreto.
+
+### Fluxo de calibracao (Android)
+
+```
+Android                          ESP32
+   |                                |
+   |--- $CA:300 ------------------->|   dispensar 300 mL para calibrar
+   |<-- OK ---------------------------   aceito, ciclo iniciando
+   |<-- IN: -------------------------   valvula abriu
+   |<-- VP:... ----------------------   atualizacoes parciais
+   |<-- QP:1680 --------------------   pulsos contados no ciclo
+   |<-- CA: ------------------------|   ciclo encerrado — aguardando medicao
+
+   [operador mede na proveta: 285 mL]
+
+   |--- $CF:285 ------------------->|   informa volume real medido
+   |<-- PL:6315 --------------------   novo pulsosLitro calculado e salvo
+   |<-- FN: ------------------------|   calibracao concluida
+```
+
+### Como o ESP32 calcula o novo fator
+
+```
+pulsosLitro = (QP_contado / ml_real_medido) * 1000
+ex.: (1680 / 285) * 1000 = 5894 pulsos/L
+```
+
+### Regras para o Android
+
+**Tela de calibracao deve:**
+1. Enviar `$CA:<ml>` — recomendado usar 300 mL ou mais para maior precisao
+2. Exibir o fluxo normal (IN:, VP:, QP:)
+3. Ao receber `CA:`: exibir campo **"Volume medido na proveta (mL)"** e botao confirmar
+4. O operador le a proveta e digita o valor
+5. Android envia `$CF:<valor_digitado>`
+6. Ao receber `PL:<novo>` + `FN:`: exibir confirmacao com o novo fator gravado
+
+**Restricoes:**
+- Nao fechar o app nem perder conexao entre `CA:` e `$CF:` — o ESP32 aguarda indefinidamente
+- Se a conexao cair apos `CA:` e antes de `$CF:`: ao reconectar, o ESP32 ainda aceita `$CF:` (estado persiste em memoria enquanto ligado)
+- Se o ESP32 reiniciar entre `CA:` e `$CF:`: `$CF:` retornara `ERRO` — reiniciar o ciclo de calibracao
+- `$CA:` cancela qualquer calibracao anterior pendente e inicia uma nova
+- `$CF:` retorna `ERRO` se enviado sem `$CA:` anterior ou com parametro zero
+
+**Estados possiveis de `$CF:`:**
+
+| Situacao | Resposta |
+|----------|----------|
+| Calibracao pendente, `ml_real` valido | `PL:<novo_valor>` + `FN:` |
+| Nenhuma calibracao pendente | `ERRO` |
+| `ml_real` = 0 ou ausente | `ERRO` |
+
+### Boas praticas
+
+- Usar pelo menos 300 mL para reduzir erro de leitura da proveta
+- Repetir 2 vezes e confirmar que `PL:` ficou estavel
+- Recalibrar ao trocar de barril se a pressao de CO2 mudar significativamente
+- O valor de `PL:` pode ser consultado a qualquer momento via `$PL:0`
+
+---
+
+## 11. Keepalive PING/PONG
 
 **Status: opcional.**
 
@@ -271,7 +348,7 @@ Se o app usar: enviar `PING` a cada 5s em estado idle e aguardar `PONG`.
 
 ---
 
-## 11. Parametros que a API deve fornecer ao app
+## 12. Parametros que a API deve fornecer ao app
 
 ```json
 {
@@ -289,7 +366,7 @@ Se o app usar: enviar `PING` a cada 5s em estado idle e aguardar `PONG`.
 
 ---
 
-## 12. Estado de implementacao do firmware
+## 13. Estado de implementacao do firmware
 
 | Funcionalidade | Status |
 |----------------|--------|
@@ -305,5 +382,8 @@ Se o app usar: enviar `PING` a cada 5s em estado idle e aguardar `PONG`.
 | `IN:` e `FN:` | implementado |
 | `VP:` durante fluxo | implementado |
 | Comando `$RS:` resume de ciclo incompleto | implementado |
+| Comando `$CA:` + `$CF:` calibracao do sensor | implementado |
+| Comando `$VR:` versao do firmware | implementado — `VR:1.0.0/2026-05-05` |
+| Buzzer sonoro em IN: e FN: | implementado — requer `USAR_BUZZER` e `PINO_BUZZER` correto |
 | MTU explicito no servidor | nao configurado — aceita proposta do cliente |
 | Resposta `BUSY` para operacao em andamento | nao implementado — retorna `ERRO` |

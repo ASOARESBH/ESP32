@@ -5,6 +5,7 @@
 #include "operaPagina.h"
 #include "operaBLE.h"
 #include "operaRFID.h"
+#include "operaBuzzer.h"
 
 config_t configuracao = {0};
 
@@ -37,6 +38,10 @@ void setup() {
     // Efetua a leitura da configuração gravada na EEPROM
     leConfiguracao();
         
+    #ifdef USAR_BUZZER
+        setupBuzzer();
+    #endif
+
     #ifdef USAR_ESP32_UART_BLE
         setupBLE();
     #endif
